@@ -6,11 +6,13 @@ wandb_log = False
 wandb_project = ''
 wandb_run_name=''
 
+
 # these make the total batch size be ~0.5M
 # 12 batch size * 1024 block size * 5 gradaccum * 8 GPUs = 491,520
-batch_size = 64
+dataset = "tinystories"
+batch_size = 12
 block_size = 256
-gradient_accumulation_steps = 5 * 8
+gradient_accumulation_steps = 1
 
 # baby GPT model :)
 n_layer = 6
