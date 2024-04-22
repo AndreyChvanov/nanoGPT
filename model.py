@@ -193,7 +193,7 @@ class GPT(nn.Module):
         all_attentions = []
         for block in self.transformer.h:
             x, attn = block(x, return_attn=retur_attn)
-            attn = attn.masked_fill(mask[:, :, :, :] == 0, 0)
+            attn = attn.masked_fill(mask[:, :, :, :] == 0, 0)[:, :, 1:, 1:]
             all_attentions.append(attn)
 
         x = self.transformer.ln_f(x)
