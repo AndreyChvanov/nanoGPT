@@ -53,7 +53,7 @@ class CausalSelfAttention(nn.Module):
             mask[0, 0, 1:, 1:] = self.bias[0, 0]
             mask[0, 0, 1:, 0] = 1
             mask[0, 0, 0, 0] = 1
-            self.main_mask = mask
+            self.register_buffer("main_mask", mask)
 
 
     def forward(self, x, return_attention=False):
