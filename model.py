@@ -193,13 +193,14 @@ class GPT(nn.Module):
         all_attentions = []
         for block in self.transformer.h:
             x, attn = block(x, return_attn=retur_attn)
-            attn = attn.masked_fill(mask[:, :, :, :] == 0, 0)[:, :, 1:, 1:]
-            all_attentions.append(attn)
+            if retur_attn:
+                attn = attn.masked_fill(mask[:, :, :, :] == 0, 0)[:, :, 1:, 1:]
+                all_attentions.append(attn)
 
         x = self.transformer.ln_f(x)
         x = x[:, 1:, :]
-        print()
-        all_attentions = torch.stack(all_attentions)
+        if retur_attn:
+            all_attentions = torch.stack(all_attentions)
 
         if targets is not None:
             # if we are given some desired targets also calculate the loss
