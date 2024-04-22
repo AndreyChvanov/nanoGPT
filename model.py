@@ -23,7 +23,7 @@ class LayerNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(ndim))
         self.bias = nn.Parameter(torch.zeros(ndim)) if bias else None
 
-    def forward(self, input):
+    def forward(self, input, **kwargs):
         return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)
 
 class CausalSelfAttention(nn.Module):
@@ -42,14 +42,21 @@ class CausalSelfAttention(nn.Module):
         self.n_embd = config.n_embd
         self.dropout = config.dropout
         # flash attention make GPU go brrrrr but support is only in PyTorch >= 2.0
-        self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
+        # self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
+        self.flash = False
         if not self.flash:
             print("WARNING: using slow attention. Flash Attention requires PyTorch >= 2.0")
             # causal mask to ensure that attention is only applied to the left in the input sequence
             self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size))
                                         .view(1, 1, config.block_size, config.block_size))
+            mask = torch.zeros(1, 1, self.bias.size(-2) + 1, self.bias.size(-1) + 1)
+            mask[0, 0, 1:, 1:] = self.bias[0, 0]
+            mask[0, 0, 1:, 0] = 1
+            mask[0, 0, 0, 0] = 1
+            self.main_mask = mask
 
-    def forward(self, x):
+
+    def forward(self, x, return_attention=False):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
@@ -65,15 +72,15 @@ class CausalSelfAttention(nn.Module):
         else:
             # manual implementation of attention
             att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-            att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
-            att = F.softmax(att, dim=-1)
-            att = self.attn_dropout(att)
-            y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+            att = att.masked_fill(self.main_mask[:,:,:T,:T] == 0, float('-inf'))
+            att_ = F.softmax(att, dim=-1)
+            att_ = self.attn_dropout(att_)
+            y = att_ @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
 
         # output projection
         y = self.resid_dropout(self.c_proj(y))
-        return y
+        return y, att
 
 class MLP(nn.Module):
 
@@ -100,10 +107,11 @@ class Block(nn.Module):
         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
         self.mlp = MLP(config)
 
-    def forward(self, x):
-        x = x + self.attn(self.ln_1(x))
+    def forward(self, x, return_attn=False):
+        res, attn = self.attn(self.ln_1(x), return_attention=return_attn)
+        x = x + res
         x = x + self.mlp(self.ln_2(x))
-        return x
+        return x, attn
 
 @dataclass
 class GPTConfig:
@@ -130,13 +138,14 @@ class GPT(nn.Module):
             h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
         ))
+        self.trsh_token = nn.Parameter(torch.zeros(1, 1, config.n_embd))
+        torch.nn.init.normal_(self.trsh_token.data, mean=0.0, std=0.02)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         # with weight tying when using torch.compile() some warnings get generated:
         # "UserWarning: functional_call was passed multiple values for tied weights.
         # This behavior is deprecated and will be an error in future versions"
         # not 100% sure what this is, so far seems to be harmless. TODO investigate
         self.transformer.wte.weight = self.lm_head.weight # https://paperswithcode.com/method/weight-tying
-
         # init all weights
         self.apply(self._init_weights)
         # apply special scaled init to the residual projections, per GPT-2 paper
@@ -167,7 +176,8 @@ class GPT(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, targets=None):
+
+    def forward(self, idx, targets=None, retur_attn=True):
         device = idx.device
         b, t = idx.size()
         assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
@@ -177,14 +187,29 @@ class GPT(nn.Module):
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
         pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
         x = self.transformer.drop(tok_emb + pos_emb)
+        trsh_token = self.trsh_token.expand(b, -1, -1)
+        x = torch.cat((trsh_token, x), dim=1)
+        mask = self.transformer.h[0].attn.main_mask
+        all_attentions = []
         for block in self.transformer.h:
-            x = block(x)
+            x, attn = block(x, return_attn=retur_attn)
+            attn = attn.masked_fill(mask[:, :, :, :] == 0, 0)
+            all_attentions.append(attn)
+
         x = self.transformer.ln_f(x)
+        x = x[:, 1:, :]
+        print()
+        all_attentions = torch.stack(all_attentions)
 
         if targets is not None:
             # if we are given some desired targets also calculate the loss
             logits = self.lm_head(x)
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
+            if retur_attn:
+                attn_weights_to_req = all_attentions[:, :, :, 1:-1, 1:-1]
+                req_loss_ber_layer = torch.sum(attn_weights_to_req ** 2, (2, 3, 4))
+                reg_loss = (req_loss_ber_layer).sum(axis=0).mean()
+                loss = loss + (1e-5 * reg_loss)
         else:
             # inference-time mini-optimization: only forward the lm_head on the very last position
             logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim
