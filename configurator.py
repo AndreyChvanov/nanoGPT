@@ -30,6 +30,7 @@ for arg in sys.argv[1:]:
         # assume it's a --key=value argument
         assert arg.startswith('--')
         key, val = arg.split('=')
+        print(key, val)
         key = key[2:]
         if key in globals():
             try:
