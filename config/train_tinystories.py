@@ -5,6 +5,7 @@
 wandb_log = False
 wandb_project = ''
 wandb_run_name=''
+neptune_api_token = ''
 
 
 # these make the total batch size be ~0.5M
