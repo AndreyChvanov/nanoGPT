@@ -29,6 +29,7 @@ for arg in sys.argv[1:]:
     else:
         # assume it's a --key=value argument
         assert arg.startswith('--')
+        print(arg.split('='))
         key, val = arg.split('=')
         print(key, val)
         key = key[2:]
