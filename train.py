@@ -44,7 +44,7 @@ init_from = 'scratch' # 'scratch' or 'resume' or 'gpt2*'
 wandb_log = False # disabled by default
 wandb_project = 'owt'
 wandb_run_name = 'gpt2' # 'run' + str(time.time())
-neptune_api_token = ''
+neptune_api_token = 'eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJhMzM2OGRiMi1hMTIyLTQ5NWMtYWZjOS1kZjcyZjZjZTI0ZjYifQ=='
 # data
 dataset = 'openwebtext'
 gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
@@ -249,7 +249,7 @@ if wandb_log and master_process:
     import wandb
     wandb.init(project=wandb_project, name=wandb_run_name, config=config)
 
-neptune_logger = NeptuneLogger(project_name="", api_token="")
+neptune_logger = NeptuneLogger(project_name="", api_token=neptune_api_token)
 
 # training loop
 X, Y = get_batch('train') # fetch the very first batch
