@@ -21,6 +21,7 @@ import time
 import math
 import pickle
 from contextlib import nullcontext
+from logger import NeptuneLogger
 
 import numpy as np
 import torch
@@ -43,6 +44,7 @@ init_from = 'scratch' # 'scratch' or 'resume' or 'gpt2*'
 wandb_log = False
 wandb_project = ''
 wandb_run_name=''
+neptune_api_token = ''
 # data
 dataset = "tinystories"
 batch_size = 12
@@ -222,7 +224,7 @@ def estimate_loss():
         for k in range(eval_iters):
             X, Y = get_batch(split)
             with ctx:
-                logits, loss = model(X, Y)
+                logits, loss = model(X, Y, retur_attn=False)
             losses[k] = loss.item()
         out[split] = losses.mean()
     model.train()
@@ -247,6 +249,9 @@ if wandb_log and master_process:
     import wandb
     wandb.init(project=wandb_project, name=wandb_run_name, config=config)
 
+
+neptune_logger = NeptuneLogger(project_name="", api_token=neptune_api_token)
+
 # training loop
 X, Y = get_batch('train') # fetch the very first batch
 t0 = time.time()
@@ -264,6 +269,9 @@ while True:
     if iter_num % eval_interval == 0 and master_process:
         losses = estimate_loss()
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        neptune_logger.add_scalar("train/loss", losses['train'], iter_num)
+        neptune_logger.add_scalar("val/loss", losses['val'], iter_num)
+        neptune_logger.add_scalar("lr", lr, iter_num)
         if wandb_log:
             wandb.log({
                 "iter": iter_num,
@@ -326,6 +334,7 @@ while True:
             mfu = raw_model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)
             running_mfu = mfu if running_mfu == -1.0 else 0.9*running_mfu + 0.1*mfu
         print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
+        neptune_logger.add_scalar("batch/loss", lossf, iter_num)
     iter_num += 1
     local_iter_num += 1
 
