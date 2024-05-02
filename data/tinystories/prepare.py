@@ -21,12 +21,12 @@ enc = tiktoken.get_encoding("gpt2")
 if __name__ == '__main__':
     # takes 54GB in huggingface .cache dir, about 8M documents (8,013,769)
     input_file_path = os.path.join(os.path.dirname(__file__), 'TinyStoriesV2-GPT4-train.txt')
-    dataset = load_dataset('parquet', data_files={"train":'tinystories_train.parquet'})
+    dataset = load_dataset('parquet', data_files={"train":'150k_tinystories_train.parquet'})
     print()
 
 
     # owt by default only contains the 'train' split, so create a test split
-    split_dataset = dataset["train"].train_test_split(test_size=0.1, seed=2357, shuffle=True)
+    split_dataset = dataset["train"].train_test_split(test_size=0.2, seed=2357, shuffle=True)
     split_dataset['val'] = split_dataset.pop('test') # rename the test split to val
 
     # this results in:

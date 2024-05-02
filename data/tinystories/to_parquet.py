@@ -6,7 +6,8 @@ if __name__ == "__main__":
         data = f.read()
     data = data.replace("\n", "")
     data = data.split("<|endoftext|>")
-    data = data[:500_000]
+    data = data[:150_000]
+    print(len(data))
     df = pd.DataFrame(data, columns=["text"])
-    print()
-    df.to_parquet("tinystories_train.parquet")
+    print(len(df))
+    df.to_parquet("150k_tinystories_train.parquet")
