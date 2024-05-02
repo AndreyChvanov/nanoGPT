@@ -44,7 +44,7 @@ init_from = 'scratch' # 'scratch' or 'resume' or 'gpt2*'
 wandb_log = False
 wandb_project = ''
 wandb_run_name=''
-neptune_api_token = ''
+neptune_api_token = 'eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJhMzM2OGRiMi1hMTIyLTQ5NWMtYWZjOS1kZjcyZjZjZTI0ZjYifQ=='
 # data
 dataset = "tinystories"
 batch_size = 12
