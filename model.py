@@ -210,7 +210,7 @@ class GPT(nn.Module):
                 attn_weights_to_req = all_attentions[:, :, :, 1:-1, 1:-1]
                 req_loss_ber_layer = torch.sum(attn_weights_to_req ** 2, (2, 3, 4))
                 reg_loss = (req_loss_ber_layer).sum(axis=0).mean()
-                loss = loss + (1e-5 * reg_loss)
+                loss = loss + (1e-6 * reg_loss)
         else:
             # inference-time mini-optimization: only forward the lm_head on the very last position
             logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim
